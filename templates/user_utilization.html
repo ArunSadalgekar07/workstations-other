@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Resource Utilization</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='user_utilization.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="user-utilization-body">
+    <nav class="dashboard-nav">
+        <div class="nav-title">
+            <i class="fas fa-users"></i>
+            <span>User Resource Monitor</span>
+        </div>
+        <div class="nav-actions">
+            <a href="{{ url_for('server_dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i>
+                Back to Dashboard
+            </a>
+        </div>
+    </nav>
+
+    <div class="user-utilization-container">
+        <div class="dashboard-header">
+            <h1 class="dashboard-title">User Resource Utilization</h1>
+            <div class="time-range-selector">
+                <select id="timeRange" onchange="handleTimeRangeChange()">
+                    <option value="live">Live Monitoring</option>
+                    <option value="daily">Last 24 Hours</option>
+                    <option value="weekly">Last Week</option>
+                    <option value="monthly">Last Month</option>
+                </select>
+            </div>
+            <div class="refresh-info" id="refreshInfo">
+                <i class="fas fa-sync-alt"></i>
+                <span>Auto-refreshing every 5s</span>
+            </div>
+        </div>
+        
+        <div class="stats-container">
+            <div class="stats-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-memory"></i> GPU Memory Usage by User</h3>
+                </div>
+                <div id="gpuUsageText">
+                    <!-- GPU usage text will be dynamically added here -->
+                    Loading...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'live';
+        let updateInterval;
+
+        // Function to handle time range changes
+        async function handleTimeRangeChange() {
+            const selectedRange = document.getElementById('timeRange').value;
+            currentMode = selectedRange;
+            
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+
+            const refreshInfo = document.getElementById('refreshInfo');
+            if (selectedRange === 'live') {
+                refreshInfo.innerHTML = '<i class="fas fa-sync-alt"></i><span>Auto-refreshing every 5s</span>';
+                updateGpuUsageText();
+                updateInterval = setInterval(updateGpuUsageText, 5000);
+            } else {
+                refreshInfo.innerHTML = '<i class="fas fa-history"></i><span>Historical Data</span>';
+                await fetchHistoricalUserGpuUsage(selectedRange);
+            }
+        }
+
+        // Function to format timestamp for display
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp.replace(' ', 'T'));
+            return date.toLocaleTimeString();
+        }
+
+        // Function to fetch historical user GPU usage data
+        async function fetchHistoricalUserGpuUsage(timeRange) {
+            try {
+                const response = await fetch(`/api/historical_user_gpu_usage?range=${timeRange}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayUserGpuUsage(data, timeRange);
+                } else {
+                    const container = document.getElementById('gpuUsageText');
+                    container.innerHTML = '<span style="color: red;">Error fetching historical data.</span>';
+                }
+            } catch (error) {
+                const container = document.getElementById('gpuUsageText');
+                container.innerHTML = '<span style="color: red;">Error fetching historical data.</span>';
+                console.error('Error fetching historical user GPU usage data:', error);
+            }
+        }
+
+        // Function to display user GPU usage data
+        function displayUserGpuUsage(data, timeRange) {
+            const container = document.getElementById('gpuUsageText');
+            container.innerHTML = ''; // Clear previous content
+            
+            if (data && data.length > 0) {
+                data.forEach(user => {
+                    if (user.username !== 'No GPU usage' && user.username !== 'NVIDIA driver not installed') {
+                        const userItem = document.createElement('div');
+                        userItem.className = 'user-gpu-item';
+                        
+                        const usernameSpan = document.createElement('span');
+                        usernameSpan.className = 'username';
+                        usernameSpan.textContent = user.username;
+                        
+                        const usageSpan = document.createElement('span');
+                        usageSpan.className = 'gpu-usage';
+                        
+                        if (timeRange === 'live') {
+                            // For live data, show current values
+                            usageSpan.textContent = `${user.gpu_memory_mib.toFixed(0)} MiB (${user.gpu_memory_percentage.toFixed(2)}%)`;
+                        } else {
+                            // For historical data, show average values
+                            const avgMemory = user.gpu_memory_mib.reduce((a, b) => a + b, 0) / user.gpu_memory_mib.length;
+                            const avgPercentage = user.gpu_memory_percentage.reduce((a, b) => a + b, 0) / user.gpu_memory_percentage.length;
+                            const maxMemory = Math.max(...user.gpu_memory_mib);
+                            const maxPercentage = Math.max(...user.gpu_memory_percentage);
+                            
+                            usageSpan.innerHTML = `
+                                <div>Avg: ${avgMemory.toFixed(0)} MiB (${avgPercentage.toFixed(2)}%)</div>
+                                <div style="font-size: 0.9em; color: var(--text-secondary);">Max: ${maxMemory.toFixed(0)} MiB (${maxPercentage.toFixed(2)}%)</div>
+                            `;
+                        }
+                        
+                        userItem.appendChild(usernameSpan);
+                        userItem.appendChild(usageSpan);
+                        
+                        container.appendChild(userItem);
+                                    }
+                });
+                
+                if (container.children.length === 0) {
+                    container.textContent = 'No GPU usage detected for non-root users.';
+                }
+            } else {
+                container.textContent = 'No GPU usage detected for non-root users.';
+                                    }
+                                }
+
+        function updateGpuUsageText() {
+            if (currentMode !== 'live') return;
+            
+            fetch('/api/user_gpu_usage')
+                .then(response => response.json())
+                .then(data => {
+                    displayUserGpuUsage(data, 'live');
+                })
+                .catch(error => {
+                    const container = document.getElementById('gpuUsageText');
+                    container.innerHTML = '<span style="color: red;">Error fetching GPU usage data.</span>';
+                    console.error('Error fetching GPU usage data:', error);
+                });
+        }
+
+        // Initialize with live data
+        updateGpuUsageText();
+        updateInterval = setInterval(updateGpuUsageText, 5000);
+    </script>
+</body>
+</html> 

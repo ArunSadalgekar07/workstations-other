@@ -1,0 +1,50 @@
+Certainly! Here’s how you should set up your systemd service for your script, using the name **gpu_logger_sh**:
+
+---
+
+### 1. **Create the service file**
+
+Create `/etc/systemd/system/gpu_logger_sh.service` with the following content (edit the paths as needed):
+
+```ini
+[Unit]
+Description=GPU Logger Shell Script
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu                # <-- use your actual username, not root if possible
+WorkingDirectory=/path/to/your/project
+ExecStart=/bin/bash /path/to/your/project/gpu_logger.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+- Replace `/path/to/your/project` with the actual directory where your `gpu_logger.sh` script is located.
+- Replace `User=ubuntu` with your actual Linux username.
+
+---
+
+### 2. **Enable and start the service**
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable gpu_logger_sh
+sudo systemctl start gpu_logger_sh
+```
+
+---
+
+### 3. **Check status and logs**
+
+```bash
+sudo systemctl status gpu_logger_sh
+sudo journalctl -u gpu_logger_sh -f
+```
+
+---
+
+**Now your script will start automatically on boot and restart if it fails, using the service name `gpu_logger_sh`.**
